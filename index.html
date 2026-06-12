@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>World Development Dashboard — DSC327</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="data/countries.js"></script>
+<style>
+/* ── RESET & TOKENS ──────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#08090d;
+  --s1:#0f1117;
+  --s2:#151a24;
+  --s3:#1c2333;
+  --border:#222d40;
+  --border2:#2a3a55;
+  --c1:#4f9cf9;   /* blue  */
+  --c2:#f97316;   /* orange*/
+  --c3:#22c55e;   /* green */
+  --c4:#a855f7;   /* purple*/
+  --c5:#f43f5e;   /* rose  */
+  --c6:#eab308;   /* yellow*/
+  --text:#dde3ee;
+  --muted:#556480;
+  --faint:#2a3a55;
+  --hd:'Space Grotesk',sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--hd);font-weight:400;overflow-x:hidden}
+
+/* subtle dot grid */
+body::before{content:'';position:fixed;inset:0;z-index:0;
+  background-image:radial-gradient(circle,rgba(79,156,249,0.07) 1px,transparent 1px);
+  background-size:28px 28px;pointer-events:none}
+
+.wrap{position:relative;z-index:1;max-width:1380px;margin:0 auto;padding:0 28px 80px}
+
+/* ── HEADER ─────────────────────────────────────────── */
+header{padding:44px 0 32px;border-bottom:1px solid var(--border);margin-bottom:36px;
+  display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:20px}
+.hl h1{font-size:clamp(1.8rem,4vw,3rem);font-weight:700;letter-spacing:-0.04em;
+  background:linear-gradient(120deg,#4f9cf9 0%,#a78bfa 50%,#f97316 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1}
+.hl p{margin-top:8px;font-size:.85rem;color:var(--muted);letter-spacing:.03em}
+.hstats{display:flex;gap:28px}
+.hstat .v{font-family:var(--mono);font-size:1.6rem;font-weight:500;color:var(--c1)}
+.hstat .l{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+
+/* ── FILTERS ─────────────────────────────────────────── */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:32px;align-items:center}
+.filters span{font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-right:4px}
+.fbtn{background:var(--s1);border:1px solid var(--border);color:var(--muted);
+  padding:6px 15px;border-radius:999px;font-family:var(--hd);font-size:.78rem;
+  cursor:pointer;transition:all .15s}
+.fbtn:hover{border-color:var(--c1);color:var(--c1)}
+.fbtn.on{background:var(--c1);border-color:var(--c1);color:#000;font-weight:600}
+
+/* ── SECTION LABEL ───────────────────────────────────── */
+.sec{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:var(--c1);
+  display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.sec::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── GRID ────────────────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:18px}
+.gfull{margin-bottom:18px}
+@media(max-width:960px){.g2,.g3{grid-template-columns:1fr}}
+
+/* ── CARD ────────────────────────────────────────────── */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:14px;
+  padding:24px;position:relative;overflow:hidden;
+  animation:fadeUp .45s ease both}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,var(--c1),transparent 60%);opacity:.4}
+.card:hover{border-color:var(--border2)}
+.ctag{font-size:.66rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:3px}
+.ctitle{font-size:.95rem;font-weight:600;color:var(--text);margin-bottom:16px}
+
+/* stagger */
+.card:nth-child(1){animation-delay:.04s}.card:nth-child(2){animation-delay:.08s}
+.card:nth-child(3){animation-delay:.12s}.card:nth-child(4){animation-delay:.16s}
+.card:nth-child(5){animation-delay:.20s}.card:nth-child(6){animation-delay:.24s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── CONTROLS ────────────────────────────────────────── */
+.ctrls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+select,input[type=range]{background:var(--s2);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:7px;font-family:var(--hd);font-size:.78rem;cursor:pointer;outline:none}
+select:focus,select:hover{border-color:var(--c1)}
+.range-wrap{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--muted)}
+.range-wrap input{width:80px;accent-color:var(--c1)}
+#top-n-val{font-family:var(--mono);color:var(--c1);min-width:24px}
+
+/* ── AXES & SVG ──────────────────────────────────────── */
+svg text{font-family:var(--hd)}
+.axis path,.axis line{stroke:var(--border)}
+.axis text{fill:var(--muted);font-size:11px}
+.gridl{stroke:var(--faint);stroke-dasharray:3 3}
+
+/* ── LEGEND ──────────────────────────────────────────── */
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.li{display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--muted);cursor:pointer;
+  transition:color .15s}
+.li:hover{color:var(--text)}
+.ld{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* ── TOOLTIP ─────────────────────────────────────────── */
+#tip{position:fixed;background:var(--s2);border:1px solid var(--border2);border-radius:10px;
+  padding:11px 14px;font-size:.8rem;pointer-events:none;opacity:0;z-index:9999;
+  transition:opacity .12s;max-width:230px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.tc{font-weight:600;color:var(--c1);margin-bottom:6px;font-size:.88rem}
+.tr{display:flex;justify-content:space-between;gap:14px;margin-top:3px}
+.tr .k{color:var(--muted);font-size:.75rem}
+.tr .v2{color:var(--text);font-size:.75rem;font-family:var(--mono)}
+
+/* ── SCROLLBAR ───────────────────────────────────────── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ── INFO BADGES ─────────────────────────────────────── */
+.badge{display:inline-block;background:var(--s3);border:1px solid var(--border);
+  border-radius:6px;padding:2px 8px;font-size:.68rem;font-family:var(--mono);color:var(--muted);margin-left:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<header>
+  <div class="hl">
+    <h1>World Development Dashboard</h1>
+    <p>DSC327 — Data Visualization Techniques &nbsp;·&nbsp; Real-World Dataset: world-data-2023.csv &nbsp;·&nbsp; BDS 7</p>
+  </div>
+  <div class="hstats">
+    <div class="hstat"><div class="v">185</div><div class="l">Countries</div></div>
+    <div class="hstat"><div class="v">6</div><div class="l">Continents</div></div>
+    <div class="hstat"><div class="v">10</div><div class="l">Indicators</div></div>
+  </div>
+</header>
+
+<!-- FILTERS -->
+<div class="filters">
+  <span>Continent:</span>
+  <button class="fbtn on" data-c="All">All</button>
+  <button class="fbtn" data-c="Asia">Asia</button>
+  <button class="fbtn" data-c="Europe">Europe</button>
+  <button class="fbtn" data-c="Africa">Africa</button>
+  <button class="fbtn" data-c="North America">N. America</button>
+  <button class="fbtn" data-c="South America">S. America</button>
+  <button class="fbtn" data-c="Oceania">Oceania</button>
+</div>
+
+<!-- ROW 1: Scatter + Bar -->
+<div class="sec">Economic &amp; Health Relationships</div>
+<div class="g2">
+
+  <div class="card">
+    <div class="ctag">Chart 1 — Scatter Plot</div>
+    <div class="ctitle">Correlation Explorer <span class="badge">interactive axes</span></div>
+    <div class="ctrls">
+      <select id="sx">
+        <option value="gdp_per_capita">GDP per Capita</option>
+        <option value="life_expectancy">Life Expectancy</option>
+        <option value="birth_rate">Birth Rate</option>
+        <option value="urban_pct">Urban Population %</option>
+        <option value="co2_per_capita">CO₂ per Capita</option>
+        <option value="physicians_per_1k">Physicians per 1k</option>
+      </select>
+      <select id="sy">
+        <option value="life_expectancy">Life Expectancy</option>
+        <option value="infant_mortality">Infant Mortality</option>
+        <option value="gdp_per_capita">GDP per Capita</option>
+        <option value="unemployment">Unemployment %</option>
+        <option value="birth_rate">Birth Rate</option>
+        <option value="physicians_per_1k">Physicians per 1k</option>
+      </select>
+    </div>
+    <svg id="scatter"></svg>
+    <div class="legend" id="scatter-leg"></div>
+  </div>
+
+  <div class="card">
+    <div class="ctag">Chart 2 — Horizontal Bar Chart</div>
+    <div class="ctitle">Country Rankings <span class="badge">top N slider</span></div>
+    <div class="ctrls">
+      <select id="bm">
+        <option value="gdp_per_capita">GDP per Capita</option>
+        <option value="life_expectancy">Life Expectancy</option>
+        <option value="infant_mortality">Infant Mortality</option>
+        <option value="co2_per_capita">CO₂ per Capita</option>
+        <option value="unemployment">Unemployment %</option>
+        <option value="birth_rate">Birth Rate</option>
+        <option value="physicians_per_1k">Physicians per 1k</option>
+        <option value="urban_pct">Urban Population %</option>
+      </select>
+      <div class="range-wrap">
+        Top <input type="range" id="topn" min="5" max="20" value="10"> <span id="top-n-val">10</span>
+      </div>
+    </div>
+    <svg id="barchart"></svg>
+  </div>
+
+</div>
+
+<!-- ROW 2: Donut + Box + Stacked -->
+<div class="sec">Distribution &amp; Composition</div>
+<div class="g3">
+
+  <div class="card">
+    <div class="ctag">Chart 3 — Donut Chart</div>
+    <div class="ctitle">Countries by Continent</div>
+    <svg id="donut"></svg>
+    <div class="legend" id="donut-leg"></div>
+  </div>
+
+  <div class="card">
+    <div class="ctag">Chart 4 — Box Plot</div>
+    <div class="ctitle">Distribution by Continent <span class="badge">with jitter</span></div>
+    <div class="ctrls">
+      <select id="boxm">
+        <option value="life_expectancy">Life Expectancy</option>
+        <option value="gdp_per_capita">GDP per Capita</option>
+        <option value="infant_mortality">Infant Mortality</option>
+        <option value="birth_rate">Birth Rate</option>
+        <option value="unemployment">Unemployment %</option>
+      </select>
+    </div>
+    <svg id="boxplot"></svg>
+  </div>
+
+  <div class="card">
+    <div class="ctag">Chart 5 — Stacked Bar</div>
+    <div class="ctitle">Development Profile by Continent</div>
+    <svg id="stacked"></svg>
+    <div class="legend" id="stacked-leg"></div>
+  </div>
+
+</div>
+
+<!-- ROW 3: Bubble full width -->
+<div class="sec">Multivariate Analysis</div>
+<div class="gfull">
+  <div class="card">
+    <div class="ctag">Chart 6 — Bubble Chart</div>
+    <div class="ctitle">GDP · Life Expectancy · Population · Continent <span class="badge">bubble = population</span></div>
+    <svg id="bubble"></svg>
+    <div class="legend" id="bubble-leg"></div>
+  </div>
+</div>
+
+<!-- ROW 4: Line chart full width -->
+<div class="sec">Cross-Indicator Patterns</div>
+<div class="gfull">
+  <div class="card">
+    <div class="ctag">Chart 7 — Grouped Bar Chart</div>
+    <div class="ctitle">Average Key Indicators per Continent <span class="badge">multi-metric</span></div>
+    <svg id="grouped"></svg>
+    <div class="legend" id="grouped-leg"></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+<div id="tip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const CCOLORS = {
+  "Asia":          "#4f9cf9",
+  "Europe":        "#22c55e",
+  "Africa":        "#f97316",
+  "North America": "#eab308",
+  "South America": "#a855f7",
+  "Oceania":       "#f43f5e"
+};
+
+const LABELS = {
+  gdp_per_capita:    "GDP per Capita (USD)",
+  life_expectancy:   "Life Expectancy (yrs)",
+  infant_mortality:  "Infant Mortality (per 1k births)",
+  co2_per_capita:    "CO₂ per Capita (tonnes)",
+  unemployment:      "Unemployment (%)",
+  birth_rate:        "Birth Rate (per 1k)",
+  urban_pct:         "Urban Population (%)",
+  forested_area:     "Forested Area (%)",
+  physicians_per_1k: "Physicians per 1,000",
+  population:        "Population"
+};
+
+let activeCont = "All";
+
+function filtered() {
+  return activeCont === "All" ? countryData : countryData.filter(d => d.continent === activeCont);
+}
+
+function fmt(k, v) {
+  if (v == null) return "N/A";
+  if (k === "gdp_per_capita") return "$" + d3.format(",.0f")(v);
+  if (k === "population")     return d3.format(".3s")(v);
+  if (k === "co2_per_capita") return d3.format(".2f")(v) + " t";
+  if (["unemployment","urban_pct","birth_rate","forested_area"].includes(k)) return d3.format(".1f")(v) + "%";
+  if (k === "life_expectancy" || k === "infant_mortality") return d3.format(".1f")(v);
+  return d3.format(".2f")(v);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOOLTIP
+// ═══════════════════════════════════════════════════════
+const tip = d3.select("#tip");
+
+function showTip(ev, country, rows) {
+  let html = `<div class="tc">${country}</div>`;
+  rows.forEach(r => html += `<div class="tr"><span class="k">${r.k}</span><span class="v2">${r.v}</span></div>`);
+  tip.html(html).style("opacity",1);
+  moveTip(ev);
+}
+function moveTip(ev) {
+  tip.style("left",(ev.clientX+14)+"px").style("top",(ev.clientY-10)+"px");
+}
+function hideTip() { tip.style("opacity",0); }
+
+// ═══════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════
+function cw(id) {
+  return document.getElementById(id).closest(".card").clientWidth - 48;
+}
+
+function axisTickFmt(k) {
+  if (k === "gdp_per_capita") return v => "$"+d3.format(".0s")(v);
+  if (["urban_pct","unemployment","birth_rate","forested_area"].includes(k)) return v => v+"%";
+  return d3.format(".0f");
+}
+
+function makeLegend(selId, entries) {
+  const leg = d3.select(selId);
+  leg.html("");
+  entries.forEach(([label, color]) => {
+    const item = leg.append("div").attr("class","li");
+    item.append("div").attr("class","ld").style("background", color);
+    item.append("span").text(label);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 1: SCATTER PLOT  (scroll/pinch to zoom, drag to pan)
+// ═══════════════════════════════════════════════════════
+function drawScatter() {
+  const data = filtered().filter(d => d[document.getElementById("sx").value] != null && d[document.getElementById("sy").value] != null);
+  const xk = document.getElementById("sx").value;
+  const yk = document.getElementById("sy").value;
+
+  const W = cw("scatter"), H = 320;
+  const m = {top:16, right:16, bottom:52, left:70};
+  const iw = W-m.left-m.right, ih = H-m.top-m.bottom;
+
+  const svg = d3.select("#scatter").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+
+  // clip path so dots don't overflow axes on zoom
+  svg.append("defs").append("clipPath").attr("id","scatter-clip")
+    .append("rect").attr("width",iw).attr("height",ih);
+
+  const g = svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  let xS = d3.scaleLinear().domain([0, d3.max(data,d=>d[xk])*1.06]).range([0,iw]);
+  let yS = d3.scaleLinear().domain([d3.min(data,d=>d[yk])*0.94, d3.max(data,d=>d[yk])*1.03]).range([ih,0]);
+
+  // axes groups (updated on zoom)
+  const xAxisG = g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`);
+  const yAxisG = g.append("g").attr("class","axis");
+  xAxisG.call(d3.axisBottom(xS).ticks(5).tickFormat(axisTickFmt(xk)));
+  yAxisG.call(d3.axisLeft(yS).ticks(5).tickFormat(axisTickFmt(yk)));
+
+  // axis labels
+  g.append("text").attr("x",iw/2).attr("y",ih+44).attr("text-anchor","middle")
+    .attr("fill","var(--muted)").attr("font-size",11).text(LABELS[xk]);
+  g.append("text").attr("transform","rotate(-90)").attr("x",-ih/2).attr("y",-58)
+    .attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size",11).text(LABELS[yk]);
+
+  // zoom hint label
+  g.append("text").attr("x",iw-4).attr("y",-4).attr("text-anchor","end")
+    .attr("fill","var(--muted)").attr("font-size",9.5)
+    .text("scroll to zoom · drag to pan · dbl-click to reset");
+
+  // clipped layer for all data elements
+  const plot = g.append("g").attr("clip-path","url(#scatter-clip)");
+
+  // grid lines inside clipped layer
+  const gridY = plot.append("g");
+  const gridX = plot.append("g");
+
+  function updateGrid(xs, ys) {
+    gridY.selectAll("line").data(ys.ticks(5)).join("line")
+      .attr("class","gridl").attr("x1",0).attr("x2",iw)
+      .attr("y1",d=>ys(d)).attr("y2",d=>ys(d));
+    gridX.selectAll("line").data(xs.ticks(5)).join("line")
+      .attr("class","gridl").attr("x1",d=>xs(d)).attr("x2",d=>xs(d))
+      .attr("y1",0).attr("y2",ih);
+  }
+  updateGrid(xS, yS);
+
+  // trend line
+  const trendLine = plot.append("line")
+    .attr("stroke","rgba(255,255,255,0.12)").attr("stroke-width",1.5).attr("stroke-dasharray","5,3");
+
+  function updateTrend(xs, ys) {
+    const xMean = d3.mean(data,d=>d[xk]), yMean = d3.mean(data,d=>d[yk]);
+    const num = d3.sum(data,d=>(d[xk]-xMean)*(d[yk]-yMean));
+    const den = d3.sum(data,d=>(d[xk]-xMean)**2);
+    if (den !== 0) {
+      const slope = num/den, intercept = yMean - slope*xMean;
+      const x1v = d3.min(data,d=>d[xk]), x2v = d3.max(data,d=>d[xk]);
+      trendLine.attr("x1",xs(x1v)).attr("y1",ys(slope*x1v+intercept))
+               .attr("x2",xs(x2v)).attr("y2",ys(slope*x2v+intercept));
+    }
+  }
+  updateTrend(xS, yS);
+
+  // dots
+  const dots = plot.selectAll("circle").data(data).enter().append("circle")
+    .attr("cx",d=>xS(d[xk])).attr("cy",d=>yS(d[yk]))
+    .attr("r",5).attr("fill",d=>CCOLORS[d.continent])
+    .attr("opacity",.75).attr("stroke","#08090d").attr("stroke-width",1)
+    .style("cursor","pointer")
+    .on("mouseover",function(ev,d){
+      d3.select(this).attr("r",8).attr("opacity",1);
+      showTip(ev, d.country, [
+        {k:LABELS[xk], v:fmt(xk,d[xk])},
+        {k:LABELS[yk], v:fmt(yk,d[yk])},
+        {k:"Continent", v:d.continent}
+      ]);
+    })
+    .on("mousemove",moveTip)
+    .on("mouseout",function(){d3.select(this).attr("r",5).attr("opacity",.75);hideTip()});
+
+  // ── ZOOM ──
+  const zoom = d3.zoom()
+    .scaleExtent([0.5, 20])
+    .extent([[0,0],[iw,ih]])
+    .translateExtent([[-iw,-ih],[2*iw,2*ih]])
+    .on("zoom", (event) => {
+      const t = event.transform;
+      const newX = t.rescaleX(xS);
+      const newY = t.rescaleY(yS);
+      xAxisG.call(d3.axisBottom(newX).ticks(5).tickFormat(axisTickFmt(xk)));
+      yAxisG.call(d3.axisLeft(newY).ticks(5).tickFormat(axisTickFmt(yk)));
+      updateGrid(newX, newY);
+      updateTrend(newX, newY);
+      dots.attr("cx",d=>newX(d[xk])).attr("cy",d=>newY(d[yk]));
+    });
+
+  // invisible rect to catch scroll/drag events
+  svg.append("rect")
+    .attr("transform",`translate(${m.left},${m.top})`)
+    .attr("width",iw).attr("height",ih)
+    .attr("fill","none").attr("pointer-events","all")
+    .style("cursor","crosshair")
+    .call(zoom)
+    .on("dblclick.zoom", function() {
+      // reset on double-click
+      d3.select(this).transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+    });
+
+  makeLegend("#scatter-leg", Object.entries(CCOLORS));
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 2: HORIZONTAL BAR CHART
+// ═══════════════════════════════════════════════════════
+function drawBar() {
+  const metric = document.getElementById("bm").value;
+  const topN   = +document.getElementById("topn").value;
+  document.getElementById("top-n-val").textContent = topN;
+
+  const all = filtered().filter(d => d[metric] != null);
+  const data = [...all].sort((a,b)=>b[metric]-a[metric]).slice(0,topN);
+
+  const W = cw("barchart"), H = Math.max(260, topN * 26 + 40);
+  const m = {top:10, right:90, bottom:40, left:130};
+  const iw = W-m.left-m.right, ih = H-m.top-m.bottom;
+
+  const svg = d3.select("#barchart").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+  const g = svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  const yS = d3.scaleBand().domain(data.map(d=>d.country)).range([0,ih]).padding(0.25);
+  const xS = d3.scaleLinear().domain([0,d3.max(data,d=>d[metric])*1.12]).range([0,iw]);
+
+  g.selectAll(".gl-x").data(xS.ticks(4)).enter().append("line")
+    .attr("class","gridl").attr("x1",d=>xS(d)).attr("x2",d=>xS(d)).attr("y1",0).attr("y2",ih);
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(yS).tickSize(0))
+    .selectAll("text").attr("dx","-8").attr("font-size",11);
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`)
+    .call(d3.axisBottom(xS).ticks(4).tickFormat(axisTickFmt(metric)));
+
+  g.append("text").attr("x",iw/2).attr("y",ih+36).attr("text-anchor","middle")
+    .attr("fill","var(--muted)").attr("font-size",11).text(LABELS[metric]);
+
+  const bars = g.selectAll(".bar").data(data).enter().append("rect")
+    .attr("y",d=>yS(d.country)).attr("height",yS.bandwidth())
+    .attr("x",0).attr("width",0)
+    .attr("fill",d=>CCOLORS[d.continent]).attr("rx",3).attr("opacity",.85)
+    .style("cursor","pointer");
+
+  bars.transition().duration(550).delay((_,i)=>i*30)
+    .attr("width",d=>xS(d[metric]));
+
+  // value labels
+  g.selectAll(".vlabel").data(data).enter().append("text")
+    .attr("x",d=>xS(d[metric])+5)
+    .attr("y",d=>yS(d.country)+yS.bandwidth()/2+4)
+    .attr("font-size",10).attr("fill","var(--muted)").attr("font-family","var(--mono)")
+    .text(d=>fmt(metric,d[metric]));
+
+  bars.on("mouseover",function(ev,d){
+    d3.select(this).attr("opacity",1);
+    showTip(ev,d.country,[{k:LABELS[metric],v:fmt(metric,d[metric])},{k:"Continent",v:d.continent}]);
+  }).on("mousemove",moveTip).on("mouseout",function(){d3.select(this).attr("opacity",.85);hideTip()});
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 3: DONUT CHART
+// ═══════════════════════════════════════════════════════
+function drawDonut() {
+  const data = filtered();
+  const counts = d3.rollup(data,v=>v.length,d=>d.continent);
+  const entries = Array.from(counts,([k,v])=>({k,v}));
+
+  const W = cw("donut");
+  const size = Math.min(W, 230);
+  const svg = d3.select("#donut").attr("width",W).attr("height",size+8);
+  svg.selectAll("*").remove();
+  const g = svg.append("g").attr("transform",`translate(${W/2},${size/2+4})`);
+
+  const rad = size/2 - 12;
+  const arc = d3.arc().innerRadius(rad*.55).outerRadius(rad);
+  const arcH = d3.arc().innerRadius(rad*.55).outerRadius(rad+6);
+  const pie = d3.pie().value(d=>d.v).sort(null);
+
+  g.selectAll(".arc").data(pie(entries)).enter().append("path")
+    .attr("d",arc)
+    .attr("fill",d=>CCOLORS[d.data.k])
+    .attr("stroke","#08090d").attr("stroke-width",2)
+    .attr("opacity",.88).style("cursor","pointer")
+    .on("mouseover",function(ev,d){
+      d3.select(this).transition().duration(120).attr("d",arcH).attr("opacity",1);
+      showTip(ev,d.data.k,[
+        {k:"Countries",v:d.data.v},
+        {k:"Share",v:d3.format(".0%")(d.data.v/data.length)}
+      ]);
+    })
+    .on("mousemove",moveTip)
+    .on("mouseout",function(ev,d){
+      d3.select(this).transition().duration(120).attr("d",arc).attr("opacity",.88);
+      hideTip();
+    });
+
+  g.append("text").attr("text-anchor","middle").attr("dy","-.2em")
+    .attr("fill","var(--text)").attr("font-size",26).attr("font-weight",700)
+    .text(data.length);
+  g.append("text").attr("text-anchor","middle").attr("dy","1.2em")
+    .attr("fill","var(--muted)").attr("font-size",9).attr("letter-spacing",".1em")
+    .text("COUNTRIES");
+
+  makeLegend("#donut-leg", entries.map(e=>[`${e.k} (${e.v})`, CCOLORS[e.k]]));
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 4: BOX PLOT
+// ═══════════════════════════════════════════════════════
+function drawBoxplot() {
+  const metric = document.getElementById("boxm").value;
+  const data = filtered().filter(d=>d[metric]!=null);
+  const grouped = d3.group(data,d=>d.continent);
+  const conts = Array.from(grouped.keys());
+
+  const stats = conts.map(c=>{
+    const vals = grouped.get(c).map(d=>d[metric]).sort(d3.ascending);
+    const q1=d3.quantile(vals,.25), med=d3.quantile(vals,.5), q3=d3.quantile(vals,.75);
+    const iqr=q3-q1;
+    const wMin=Math.max(d3.min(vals),q1-1.5*iqr);
+    const wMax=Math.min(d3.max(vals),q3+1.5*iqr);
+    const outliers=vals.filter(v=>v<wMin||v>wMax);
+    return {c,q1,med,q3,wMin,wMax,vals,outliers};
+  });
+
+  const W=cw("boxplot"), H=300;
+  const m={top:16,right:16,bottom:60,left:65};
+  const iw=W-m.left-m.right, ih=H-m.top-m.bottom;
+
+  const svg=d3.select("#boxplot").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  const allV=data.map(d=>d[metric]);
+  const yS=d3.scaleLinear().domain([d3.min(allV)*.92,d3.max(allV)*1.05]).range([ih,0]);
+  const xS=d3.scaleBand().domain(conts).range([0,iw]).padding(.38);
+
+  g.selectAll(".gl-y").data(yS.ticks(4)).enter().append("line")
+    .attr("class","gridl").attr("x1",0).attr("x2",iw)
+    .attr("y1",d=>yS(d)).attr("y2",d=>yS(d));
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`)
+    .call(d3.axisBottom(xS))
+    .selectAll("text").attr("transform","rotate(-28)").attr("text-anchor","end")
+    .attr("dy",".35em").attr("dx","-.4em");
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(yS).ticks(4).tickFormat(axisTickFmt(metric)));
+
+  g.append("text").attr("transform","rotate(-90)").attr("x",-ih/2).attr("y",-54)
+    .attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size",11)
+    .text(LABELS[metric]);
+
+  stats.forEach(s=>{
+    const cx=xS(s.c)+xS.bandwidth()/2;
+    const bw=xS.bandwidth();
+    const col=CCOLORS[s.c];
+
+    // whisker line
+    g.append("line").attr("x1",cx).attr("x2",cx)
+      .attr("y1",yS(s.wMin)).attr("y2",yS(s.wMax))
+      .attr("stroke",col).attr("stroke-width",1.5).attr("opacity",.5);
+    [s.wMin,s.wMax].forEach(v=>{
+      g.append("line").attr("x1",cx-bw*.28).attr("x2",cx+bw*.28)
+        .attr("y1",yS(v)).attr("y2",yS(v))
+        .attr("stroke",col).attr("stroke-width",1.5).attr("opacity",.6);
+    });
+    // IQR box
+    g.append("rect")
+      .attr("x",xS(s.c)).attr("width",bw)
+      .attr("y",yS(s.q3)).attr("height",Math.max(1,yS(s.q1)-yS(s.q3)))
+      .attr("fill",col).attr("opacity",.18)
+      .attr("stroke",col).attr("stroke-width",1.5).attr("rx",3);
+    // median
+    g.append("line")
+      .attr("x1",xS(s.c)).attr("x2",xS(s.c)+bw)
+      .attr("y1",yS(s.med)).attr("y2",yS(s.med))
+      .attr("stroke",col).attr("stroke-width",2.5);
+
+    // jittered points
+    s.vals.forEach(v=>{
+      g.append("circle")
+        .attr("cx",cx+(Math.random()-.5)*bw*.55)
+        .attr("cy",yS(v)).attr("r",2.2)
+        .attr("fill",col).attr("opacity",.45);
+    });
+    // outliers highlighted
+    s.outliers.forEach(v=>{
+      g.append("circle")
+        .attr("cx",cx+(Math.random()-.5)*bw*.4)
+        .attr("cy",yS(v)).attr("r",3.5)
+        .attr("fill","none").attr("stroke",col).attr("stroke-width",1.5).attr("opacity",.9);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 5: STACKED BAR (normalized avg per continent)
+// ═══════════════════════════════════════════════════════
+function drawStacked() {
+  const data = filtered();
+  const conts = [...new Set(data.map(d=>d.continent))];
+
+  const METRICS = [
+    {k:"life_expectancy",  max:90,  label:"Life Exp.",  col:"#4f9cf9"},
+    {k:"gdp_per_capita",   max:100000, label:"GDP",     col:"#eab308"},
+    {k:"physicians_per_1k",max:10,  label:"Physicians", col:"#22c55e"},
+    {k:"urban_pct",        max:100, label:"Urban %",   col:"#a855f7"},
+  ];
+
+  const cdata = conts.map(c=>{
+    const cd=data.filter(d=>d.continent===c);
+    const obj={continent:c};
+    METRICS.forEach(m=>{
+      const vals=cd.filter(d=>d[m.k]!=null).map(d=>d[m.k]);
+      obj[m.k]=vals.length? d3.mean(vals)/m.max : 0;
+    });
+    return obj;
+  });
+
+  const W=cw("stacked"), H=290;
+  const m={top:16,right:16,bottom:60,left:42};
+  const iw=W-m.left-m.right, ih=H-m.top-m.bottom;
+
+  const svg=d3.select("#stacked").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  const stack=d3.stack().keys(METRICS.map(m=>m.k));
+  const stacked=stack(cdata);
+
+  const xS=d3.scaleBand().domain(conts).range([0,iw]).padding(.3);
+  const yS=d3.scaleLinear().domain([0,METRICS.length]).range([ih,0]);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`)
+    .call(d3.axisBottom(xS))
+    .selectAll("text").attr("transform","rotate(-25)").attr("text-anchor","end")
+    .attr("dy",".35em").attr("dx","-.4em");
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(yS).ticks(4).tickFormat(d3.format(".1f")));
+
+  stacked.forEach((layer,i)=>{
+    const col=METRICS[i].col;
+    g.selectAll(null).data(layer).enter().append("rect")
+      .attr("x",d=>xS(d.data.continent))
+      .attr("width",xS.bandwidth())
+      .attr("y",d=>yS(d[1]))
+      .attr("height",d=>Math.max(0,yS(d[0])-yS(d[1])))
+      .attr("fill",col).attr("opacity",.82).attr("rx",2)
+      .style("cursor","pointer")
+      .on("mouseover",function(ev,d){
+        d3.select(this).attr("opacity",1);
+        showTip(ev,d.data.continent,
+          METRICS.map(mm=>({k:mm.label+" (norm)",v:d3.format(".3f")(d.data[mm.k])}))
+        );
+      }).on("mousemove",moveTip).on("mouseout",function(){d3.select(this).attr("opacity",.82);hideTip()});
+  });
+
+  makeLegend("#stacked-leg", METRICS.map(mm=>[mm.label, mm.col]));
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 6: BUBBLE CHART  (scroll/pinch to zoom, drag to pan)
+// ═══════════════════════════════════════════════════════
+function drawBubble() {
+  const data=filtered().filter(d=>d.gdp_per_capita!=null&&d.life_expectancy!=null&&d.population!=null);
+
+  const W=cw("bubble"), H=400;
+  const m={top:20,right:30,bottom:56,left:72};
+  const iw=W-m.left-m.right, ih=H-m.top-m.bottom;
+
+  const svg=d3.select("#bubble").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+
+  svg.append("defs").append("clipPath").attr("id","bubble-clip")
+    .append("rect").attr("width",iw).attr("height",ih);
+
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  const xS=d3.scaleLinear().domain([0,d3.max(data,d=>d.gdp_per_capita)*1.07]).range([0,iw]);
+  const yS=d3.scaleLinear().domain([48,90]).range([ih,0]);
+  const rS=d3.scaleSqrt().domain([0,d3.max(countryData,d=>d.population)]).range([3,44]);
+
+  const xAxisG=g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`);
+  const yAxisG=g.append("g").attr("class","axis");
+  xAxisG.call(d3.axisBottom(xS).ticks(6).tickFormat(v=>"$"+d3.format(".0s")(v)));
+  yAxisG.call(d3.axisLeft(yS).ticks(6));
+
+  g.append("text").attr("x",iw/2).attr("y",ih+46).attr("text-anchor","middle")
+    .attr("fill","var(--muted)").attr("font-size",11).text(LABELS["gdp_per_capita"]);
+  g.append("text").attr("transform","rotate(-90)").attr("x",-ih/2).attr("y",-58)
+    .attr("text-anchor","middle").attr("fill","var(--muted)").attr("font-size",11)
+    .text(LABELS["life_expectancy"]);
+
+  g.append("text").attr("x",iw-4).attr("y",-4).attr("text-anchor","end")
+    .attr("fill","var(--muted)").attr("font-size",9.5)
+    .text("scroll to zoom · drag to pan · dbl-click to reset");
+
+  const plot=g.append("g").attr("clip-path","url(#bubble-clip)");
+  const gridYG=plot.append("g"), gridXG=plot.append("g");
+
+  function updateGrid(xs,ys){
+    gridYG.selectAll("line").data(ys.ticks(5)).join("line")
+      .attr("class","gridl").attr("x1",0).attr("x2",iw).attr("y1",d=>ys(d)).attr("y2",d=>ys(d));
+    gridXG.selectAll("line").data(xs.ticks(5)).join("line")
+      .attr("class","gridl").attr("x1",d=>xs(d)).attr("x2",d=>xs(d)).attr("y1",0).attr("y2",ih);
+  }
+  updateGrid(xS,yS);
+
+  // large bubbles first
+  const sorted=[...data].sort((a,b)=>b.population-a.population);
+
+  const bubbles = plot.selectAll("circle").data(sorted).enter().append("circle")
+    .attr("cx",d=>xS(d.gdp_per_capita)).attr("cy",d=>yS(d.life_expectancy))
+    .attr("r",d=>rS(d.population))
+    .attr("fill",d=>CCOLORS[d.continent]).attr("opacity",.6)
+    .attr("stroke",d=>CCOLORS[d.continent]).attr("stroke-width",1.2)
+    .style("cursor","pointer")
+    .on("mouseover",function(ev,d){
+      d3.select(this).attr("opacity",1).attr("stroke-width",2.5);
+      showTip(ev,d.country,[
+        {k:"GDP per Capita",v:fmt("gdp_per_capita",d.gdp_per_capita)},
+        {k:"Life Expectancy",v:fmt("life_expectancy",d.life_expectancy)},
+        {k:"Population",v:fmt("population",d.population)},
+        {k:"Continent",v:d.continent}
+      ]);
+    }).on("mousemove",moveTip)
+      .on("mouseout",function(){d3.select(this).attr("opacity",.6).attr("stroke-width",1.2);hideTip()});
+
+  // ── ZOOM ──
+  const zoom=d3.zoom()
+    .scaleExtent([0.5,18])
+    .extent([[0,0],[iw,ih]])
+    .translateExtent([[-iw*0.5,-ih*0.5],[iw*1.5,ih*1.5]])
+    .on("zoom",(event)=>{
+      const t=event.transform;
+      const newX=t.rescaleX(xS);
+      const newY=t.rescaleY(yS);
+      xAxisG.call(d3.axisBottom(newX).ticks(6).tickFormat(v=>"$"+d3.format(".0s")(v)));
+      yAxisG.call(d3.axisLeft(newY).ticks(6));
+      updateGrid(newX,newY);
+      bubbles.attr("cx",d=>newX(d.gdp_per_capita)).attr("cy",d=>newY(d.life_expectancy));
+    });
+
+  svg.append("rect")
+    .attr("transform",`translate(${m.left},${m.top})`)
+    .attr("width",iw).attr("height",ih)
+    .attr("fill","none").attr("pointer-events","all")
+    .style("cursor","crosshair")
+    .call(zoom)
+    .on("dblclick.zoom",function(){
+      d3.select(this).transition().duration(400).call(zoom.transform,d3.zoomIdentity);
+    });
+
+  makeLegend("#bubble-leg", Object.entries(CCOLORS));
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHART 7: GROUPED BAR CHART
+// ═══════════════════════════════════════════════════════
+function drawGrouped() {
+  const data=filtered();
+  const conts=[...new Set(data.map(d=>d.continent))];
+  const METRICS=[
+    {k:"birth_rate",     label:"Birth Rate",   col:"#4f9cf9"},
+    {k:"infant_mortality",label:"Infant Mort.",col:"#f43f5e"},
+    {k:"unemployment",   label:"Unemploy. %", col:"#eab308"},
+    {k:"physicians_per_1k",label:"Physicians/1k",col:"#22c55e"},
+  ];
+
+  const cdata=conts.map(c=>{
+    const cd=data.filter(d=>d.continent===c);
+    const obj={continent:c};
+    METRICS.forEach(m=>{
+      const vals=cd.filter(d=>d[m.k]!=null).map(d=>d[m.k]);
+      obj[m.k]=vals.length? d3.mean(vals) : 0;
+    });
+    return obj;
+  });
+
+  const W=cw("grouped"), H=320;
+  const m={top:16,right:20,bottom:56,left:52};
+  const iw=W-m.left-m.right, ih=H-m.top-m.bottom;
+
+  const svg=d3.select("#grouped").attr("width",W).attr("height",H);
+  svg.selectAll("*").remove();
+  const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+
+  const x0=d3.scaleBand().domain(conts).range([0,iw]).padding(.2);
+  const x1=d3.scaleBand().domain(METRICS.map(m=>m.k)).range([0,x0.bandwidth()]).padding(.05);
+  const maxVal=d3.max(cdata,cd=>d3.max(METRICS,m=>cd[m.k]));
+  const yS=d3.scaleLinear().domain([0,maxVal*1.12]).range([ih,0]);
+
+  g.selectAll(".gl-y").data(yS.ticks(4)).enter().append("line")
+    .attr("class","gridl").attr("x1",0).attr("x2",iw)
+    .attr("y1",d=>yS(d)).attr("y2",d=>yS(d));
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${ih})`)
+    .call(d3.axisBottom(x0))
+    .selectAll("text").attr("font-size",11);
+  g.append("g").attr("class","axis")
+    .call(d3.axisLeft(yS).ticks(4));
+
+  cdata.forEach(cd=>{
+    METRICS.forEach(mm=>{
+      g.append("rect")
+        .attr("x",x0(cd.continent)+x1(mm.k))
+        .attr("width",x1.bandwidth())
+        .attr("y",ih).attr("height",0)
+        .attr("fill",mm.col).attr("rx",2).attr("opacity",.82)
+        .style("cursor","pointer")
+        .on("mouseover",function(ev){
+          d3.select(this).attr("opacity",1);
+          showTip(ev,cd.continent,[
+            {k:mm.label,v:d3.format(".2f")(cd[mm.k])},
+            {k:"Avg across continent",v:""}
+          ]);
+        }).on("mousemove",moveTip).on("mouseout",function(){d3.select(this).attr("opacity",.82);hideTip()})
+        .transition().duration(600).delay((_,i)=>i*20)
+        .attr("y",yS(cd[mm.k])).attr("height",ih-yS(cd[mm.k]));
+    });
+  });
+
+  makeLegend("#grouped-leg", METRICS.map(mm=>[mm.label, mm.col]));
+}
+
+// ═══════════════════════════════════════════════════════
+//  WIRE UP CONTROLS
+// ═══════════════════════════════════════════════════════
+["sx","sy"].forEach(id=>document.getElementById(id).addEventListener("change",drawScatter));
+["bm"].forEach(id=>document.getElementById(id).addEventListener("change",drawBar));
+document.getElementById("topn").addEventListener("input",drawBar);
+document.getElementById("boxm").addEventListener("change",drawBoxplot);
+
+d3.selectAll(".fbtn").on("click",function(){
+  d3.selectAll(".fbtn").classed("on",false);
+  d3.select(this).classed("on",true);
+  activeCont=this.dataset.c;
+  drawAll();
+});
+
+// ═══════════════════════════════════════════════════════
+//  DRAW ALL
+// ═══════════════════════════════════════════════════════
+function drawAll(){
+  drawScatter();
+  drawBar();
+  drawDonut();
+  drawBoxplot();
+  drawStacked();
+  drawBubble();
+  drawGrouped();
+}
+
+drawAll();
+window.addEventListener("resize",drawAll);
+</script>
+</body>
+</html>
