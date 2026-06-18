@@ -304,7 +304,8 @@ function fmt(k, v) {
   if (k === "gdp_per_capita") return "$" + d3.format(",.0f")(v);
   if (k === "population")     return d3.format(".3s")(v);
   if (k === "co2_per_capita") return d3.format(".2f")(v) + " t";
-  if (["unemployment","urban_pct","birth_rate","forested_area"].includes(k)) return d3.format(".1f")(v) + "%";
+  if (["unemployment","urban_pct","forested_area"].includes(k)) return d3.format(".1f")(v) + "%";
+  if (k === "birth_rate") return d3.format(".1f")(v) + " /1k";
   if (k === "life_expectancy" || k === "infant_mortality") return d3.format(".1f")(v);
   return d3.format(".2f")(v);
 }
@@ -334,7 +335,8 @@ function cw(id) {
 
 function axisTickFmt(k) {
   if (k === "gdp_per_capita") return v => "$"+d3.format(".0s")(v);
-  if (["urban_pct","unemployment","birth_rate","forested_area"].includes(k)) return v => v+"%";
+  if (["urban_pct","unemployment","forested_area"].includes(k)) return v => d3.format(".0f")(v)+"%";
+  if (["co2_per_capita","physicians_per_1k"].includes(k)) return d3.format(".1f");
   return d3.format(".0f");
 }
 
@@ -369,7 +371,9 @@ function drawScatter() {
 
   const g = svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
 
-  let xS = d3.scaleLinear().domain([0, d3.max(data,d=>d[xk])*1.06]).range([0,iw]);
+  const xPad = ["co2_per_capita","physicians_per_1k","birth_rate","life_expectancy","infant_mortality","unemployment","urban_pct","forested_area"].includes(xk);
+  const xMin = xPad ? d3.min(data,d=>d[xk])*0.9 : 0;
+  let xS = d3.scaleLinear().domain([xMin, d3.max(data,d=>d[xk])*1.06]).range([0,iw]);
   let yS = d3.scaleLinear().domain([d3.min(data,d=>d[yk])*0.94, d3.max(data,d=>d[yk])*1.03]).range([ih,0]);
 
   // axes groups (updated on zoom)
